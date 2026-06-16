@@ -5,3 +5,5 @@ The project is still WIP!
 Running the project: 
 
 `go run . -k yourITADapiKey -m full/snapshot`
+
+`python3 prepare_ml.py`
