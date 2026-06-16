@@ -2,11 +2,11 @@ package main
 
 import (
 	"strings"
+	"sync"
 )
 
-type GameSilver struct {
+type GameGold struct {
 	SteamId             int
-	Id                  int
 	Name                string
 	CopiesSold          int
 	Unreleased          bool
@@ -20,6 +20,7 @@ type GameSilver struct {
 	PublisherClass      string
 	ReviewScore         int
 	Genres              string
+	Categories          string
 	Type                string
 	IsFree              bool
 	PriceCurrency       string
@@ -29,24 +30,47 @@ type GameSilver struct {
 	PlatformsWindows    bool
 	PlatformsMac        bool
 	PlatformsLinux      bool
-	Categories          string
 	// ReleaseDateComingSoon bool
 	// ReleaseDateDate       string
 }
 type PriceLogSilver struct {
+	SteamId          int
+	Timestamp        string
+	PriceAmount      float32
+	PriceAmountInt   int
+	PriceCurrency    string
+	RegularAmount    float32
+	RegularAmountInt int
+	RegularCurrency  string
+	Cut              int
 }
 
-func transform(matrix GameMatrix) ([]GameSilver, []PriceLogSilver) {
-	games := prepareGame(matrix)
+func transform(matrix GameMatrix) ([]GameGold, []PriceLogSilver) {
+	var (
+		games     []GameGold
+		priceLogs []PriceLogSilver
+	)
 
-	priceLogs := preparePriceLogs(matrix)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if !ctx.full {
+			return
+		}
+		games = prepareGame(matrix)
+	}()
+	go func() {
+		defer wg.Done()
+		priceLogs = preparePriceLogs(matrix)
+	}()
+	wg.Wait()
 
 	return games, priceLogs
 }
 
-func prepareGame(matrix GameMatrix) []GameSilver {
-	var games []GameSilver
-
+func prepareGame(matrix GameMatrix) []GameGold {
+	var games []GameGold
 	for _, dim := range matrix {
 		genres := make([]string, len(dim.Details.Genres))
 		for i, genre := range dim.Details.Genres {
@@ -60,7 +84,7 @@ func prepareGame(matrix GameMatrix) []GameSilver {
 		}
 		categorieStr := strings.Join(categories, ",")
 
-		game := GameSilver{
+		game := GameGold{
 			SteamId:             dim.Base.SteamId,
 			Name:                dim.Details.Name,
 			Unreleased:          dim.Base.Unreleased,
@@ -73,6 +97,7 @@ func prepareGame(matrix GameMatrix) []GameSilver {
 			Publishers:          strings.Join(dim.Details.Publishers, ","),
 			PublisherClass:      dim.Base.PublisherClass,
 			Genres:              genresStr,
+			Categories:          categorieStr,
 			Type:                dim.Details.Type,
 			IsFree:              dim.Details.IsFree,
 			PriceCurrency:       dim.Details.Price.Currency,
@@ -82,17 +107,29 @@ func prepareGame(matrix GameMatrix) []GameSilver {
 			PlatformsWindows:    dim.Details.Platforms.Windows,
 			PlatformsMac:        dim.Details.Platforms.Mac,
 			PlatformsLinux:      dim.Details.Platforms.Linux,
-			Categories:          categorieStr,
 		}
-
 		games = append(games, game)
 	}
-
 	return games
 }
 
 func preparePriceLogs(matrix GameMatrix) []PriceLogSilver {
 	var priceLogs []PriceLogSilver
-
+	for i, dim := range matrix {
+		for _, log := range dim.Prices {
+			priceLog := PriceLogSilver{
+				SteamId:          i,
+				Timestamp:        log.Timestamp,
+				PriceAmount:      log.Deal.Price.Amount,
+				PriceAmountInt:   log.Deal.Price.AmountInt,
+				PriceCurrency:    log.Deal.Price.Currency,
+				RegularAmount:    log.Deal.Regular.Amount,
+				RegularAmountInt: log.Deal.Regular.AmountInt,
+				RegularCurrency:  log.Deal.Regular.Currency,
+				Cut:              log.Deal.Cut,
+			}
+			priceLogs = append(priceLogs, priceLog)
+		}
+	}
 	return priceLogs
 }

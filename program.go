@@ -1,101 +1,61 @@
 package main
 
 import (
-	// "database/sql"
-	"bufio"
-	"fmt"
-	"strings"
-
-	// "maps"
-	"net/http"
-	// "slices"
+	// "bufio"
+	// "fmt"
 	"os"
-	"strconv"
-	"sync"
-	"time"
-	// _ "modernc.org/sqlite"
+	"strings"
 )
+
+type context struct {
+	full bool
+}
 
 var (
 	apiKeyITAD string
+	ctx        context
 )
 
 func main() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Provide an ITAD API key:")
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		panicf("%s", err)
-	}
-	apiKeyITAD = strings.TrimSpace(input)
+	ctx = context{true}
+
+	args := os.Args
+	processArgs(args)
 
 	matrix := extract()
-
-	transform(matrix)
-
-	load()
+	games, priceLogs := transform(matrix)
+	load(games, priceLogs)
 }
 
-func extract() GameMatrix {
-	zhttp := httpCustom{}
-	zhttp.client = &http.Client{Timeout: 30 * time.Second}
-
-	resGamalytic, err := fetchGamesList(&zhttp)
-	if err != nil {
-		panicf("Inital load from SteamSpy failed, %s", err)
+func processArgs(args []string) {
+	if len(args)%2 != 0 {
+		panic("Invalid arguments!")
 	}
 
-	var (
-		appids   []int
-		gamesMap GamalyticProc
-	)
-	gamesMap = make(GamalyticProc)
-	for i := 0; i < len(resGamalytic.Result); i++ {
-		game := resGamalytic.Result[i]
-		appid := game.SteamId
-		appids = append(appids, appid)
-		gamesMap[appid] = game
-	}
-	appids = appids[:200]
+	for i, arg := range args {
+		if i%2 == 0 {
+			continue
+		}
 
-	var (
-		resSteam map[int]SteamResp
-		resITAD  ITADResp
-		wg       sync.WaitGroup
-	)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		resSteam, err = fetchGameDetails(&zhttp, appids)
-		if err != nil {
-			panicf("Inital load from Steam failed, %s", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		params := make(map[int]string)
-		for _, appid := range appids {
-			params[appid] = fmt.Sprintf("app/%v", strconv.Itoa(appid))
-		}
-		resITAD, err = fetchGamesPrices(&zhttp, params)
-		if err != nil {
-			panicf("Inital load from ITAD failed, %s", err)
-		}
-	}()
-	wg.Wait()
-
-	matrix := make(GameMatrix)
-	for _, appid := range appids {
-		matrix[appid] = Dim{
-			Base:    gamesMap[appid],
-			Details: resSteam[appid][appid].Data,
-			Prices:  resITAD[appid].priceLogs,
+		switch arg {
+		case "-m":
+			if len(args) >= i+1 {
+				mode := args[i+1]
+				switch mode {
+				case "full":
+					ctx.full = true
+				case "snapshot":
+					ctx.full = false
+				default:
+					panic("Invalid mode argument!")
+				}
+			}
+		case "-k":
+			if len(args) >= i+1 {
+				apiKeyITAD = strings.TrimSpace(args[i+1])
+			}
+		default:
+			panic("Invalid parameter!")
 		}
 	}
-
-	return matrix
-}
-
-func load() {
-
 }

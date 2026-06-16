@@ -43,16 +43,23 @@ func (c *httpCustom) post(url string, contentType string, body io.Reader) ([]byt
 	return io.ReadAll(res.Body)
 }
 
-func writeJsonToFile(jsonObject *any) error {
-	file, err := os.OpenFile("games.json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+func writeToFile(obj any, fileName string) error {
+	file, err := os.OpenFile(
+		"data/"+fileName+".json",
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+		0644,
+	)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	json_encoder := json.NewEncoder(file)
-	json_encoder.SetIndent("", "  ")
-	json_encoder.Encode(&jsonObject)
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+
+	if err := encoder.Encode(obj); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -66,11 +73,11 @@ func getFunctionName() string {
 	return strings.TrimPrefix(fn.Name(), "main.")
 }
 
-func sdebugf(format string, a ...any) string {
-	msg := fmt.Sprintf("[D] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))
-	// fmt.Print(msg)
-	return msg
-}
+// func sdebugf(format string, a ...any) string {
+// 	msg := fmt.Sprintf("[D] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))
+// 	// fmt.Print(msg)
+// 	return msg
+// }
 
 func sinfof(format string, a ...any) string {
 	msg := fmt.Sprintf("[I] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))
@@ -78,11 +85,11 @@ func sinfof(format string, a ...any) string {
 	return msg
 }
 
-func swarnf(format string, a ...any) string {
-	msg := fmt.Sprintf("[W] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))
-	// fmt.Print(msg)
-	return msg
-}
+// func swarnf(format string, a ...any) string {
+// 	msg := fmt.Sprintf("[W] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))
+// 	// fmt.Print(msg)
+// 	return msg
+// }
 
 func serrorf(format string, a ...any) string {
 	msg := fmt.Sprintf("[E] %s: %s\n", getFunctionName(), fmt.Sprintf(format, a...))

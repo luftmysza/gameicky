@@ -1,17 +1,17 @@
 package main
 
 import (
-	// "database/sql"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"maps"
+	"net/http"
 	"slices"
+	"strconv"
+	"sync"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 type GameMatrix map[int]Dim
@@ -120,12 +120,78 @@ type GamalyticGame struct {
 	ReleaseDate         int      `json:"releaseDate"`
 	EarlyAccessExitDate int      `json:"earlyAccessExitDate"`
 	EAReleaseDate       int      `json:"EAReleaseDate"`
-	Price               int      `json:"price"`
+	Price               float32  `json:"price"`
 	Developers          []string `json:"developers"`
 	Publishers          []string `json:"publishers"`
 	PublisherClass      string   `json:"publisherClass"`
 	ReviewScore         int      `json:"reviewScore"`
 	Genres              []string `json:"genres"`
+}
+
+func extract() GameMatrix {
+	zhttp := httpCustom{}
+	zhttp.client = &http.Client{Timeout: 30 * time.Second}
+
+	resGamalytic, err := fetchGamesList(&zhttp)
+	if err != nil {
+		panicf("Inital load from SteamSpy failed, %s", err)
+	}
+
+	var (
+		appids   []int
+		gamesMap GamalyticProc
+	)
+	gamesMap = make(GamalyticProc)
+	for i := 0; i < len(resGamalytic.Result); i++ {
+		game := resGamalytic.Result[i]
+		appid := game.SteamId
+		appids = append(appids, appid)
+		gamesMap[appid] = game
+	}
+	// can slice the list for testing purposes
+	// appids = appids[:200]
+
+	var (
+		resSteam map[int]SteamResp
+		resITAD  ITADResp
+		wg       sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		if !ctx.full {
+			return
+		}
+
+		resSteam, err = fetchGameDetails(&zhttp, appids)
+		if err != nil {
+			panicf("Inital load from Steam failed, %s", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		params := make(map[int]string)
+		for _, appid := range appids {
+			params[appid] = fmt.Sprintf("app/%v", strconv.Itoa(appid))
+		}
+		resITAD, err = fetchGamesPrices(&zhttp, params)
+		if err != nil {
+			panicf("Inital load from ITAD failed, %s", err)
+		}
+	}()
+	wg.Wait()
+
+	matrix := make(GameMatrix)
+	for _, appid := range appids {
+		matrix[appid] = Dim{
+			Base:    gamesMap[appid],
+			Details: resSteam[appid][appid].Data,
+			Prices:  resITAD[appid].priceLogs,
+		}
+	}
+
+	return matrix
 }
 
 func obsolete_fetchGamesList(client *httpCustom) (SSpyResp, error) {
@@ -171,7 +237,7 @@ func fetchGameDetails(client *httpCustom, appids []int) (map[int]SteamResp, erro
 		}
 
 		apiRespList[appid] = apiResp
-		msg := sinfof("Collected game details for %d:", appid)
+		msg := sinfof("Collected game details for %d", appid)
 		log.Print(msg)
 
 		time.Sleep(time.Millisecond * 1500)
@@ -219,7 +285,7 @@ func fetchGamesPrices(client *httpCustom, params map[int]string) (ITADResp, erro
 		}
 
 		apiResp[appid] = ITADSnapshot{guid: guid, priceLogs: priceLogs}
-		msg := sinfof("Collected price logs for  %d", appid)
+		msg := sinfof("Collected price logs for %d", appid)
 		log.Print(msg)
 
 		time.Sleep(time.Millisecond * 300)
@@ -229,7 +295,7 @@ func fetchGamesPrices(client *httpCustom, params map[int]string) (ITADResp, erro
 
 func fetchGamesList(client *httpCustom) (GamalyticResp, error) {
 	const urlBase = "https://api.gamalytic.com/steam-games/list"
-	apiRespFull := GamalyticResp{}
+	var apiRespFull GamalyticResp
 
 	for page := range 1 {
 
@@ -240,12 +306,16 @@ func fetchGamesList(client *httpCustom) (GamalyticResp, error) {
 			return apiRespFull, errors.New(msg)
 		}
 
-		var apiResp []GamalyticGame
+		var apiResp GamalyticResp
 		if err := json.Unmarshal(res, &apiResp); err != nil {
 			msg := serrorf("cannot decode page %d: %s", page, err)
 			return apiRespFull, errors.New(msg)
 		}
-		apiRespFull.Result = slices.Concat(apiRespFull.Result, apiResp)
+		if apiRespFull.Pages == 0 {
+			apiRespFull.Pages = apiResp.Pages
+			apiRespFull.Total = apiResp.Total
+		}
+		apiRespFull.Result = slices.Concat(apiRespFull.Result, apiResp.Result)
 	}
 	return apiRespFull, nil
 }

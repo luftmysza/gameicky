@@ -1,5 +1,8 @@
-# Scripts with secrets
-bin/
+# Test scripts
+bin/*.sh
+
+# DB copie
+data/
 
 # Binaries for programs and plugins
 *.exe
