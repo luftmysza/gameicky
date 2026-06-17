@@ -24,13 +24,11 @@ from sklearn.preprocessing import StandardScaler
 DATABASE_FILE = Path(__file__).parent.parent / "data" / "steam_etl.db"
 TABLE_NAME = "price_logs_gold"
 
-MODEL_FILE = "steam_price_model.joblib"
+MODEL_FILE = Path(__file__).parent.parent / "data" / "steam_price_model.joblib"
 TEST_PREDICTIONS_TABLE = "price_predictions_test"
 
 TEST_FRACTION = 0.20
 
-# The target looks 30 days into the future.
-# We therefore leave a 30-day gap between training and testing.
 TARGET_HORIZON_DAYS = 30
 
 FEATURES = [
@@ -140,7 +138,7 @@ def validate_dataset(dataset: pd.DataFrame) -> pd.DataFrame:
 
 def chronological_split(
     dataset: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp]:
+):
     unique_dates = np.array(sorted(dataset["snapshot_date"].unique()))
 
     if len(unique_dates) < 10:
@@ -157,8 +155,6 @@ def chronological_split(
 
     test_start = pd.Timestamp(unique_dates[split_position])
 
-    # A training row's target uses the following 30 days.
-    # Exclude rows whose target window overlaps the test period.
     training_cutoff = test_start - pd.Timedelta(days=TARGET_HORIZON_DAYS)
 
     train = dataset[dataset["snapshot_date"] < training_cutoff].copy()
@@ -293,7 +289,6 @@ def print_logistic_coefficients(
     classifier = model.named_steps["classifier"]
     scaler = model.named_steps["scaler"]
 
-    # Coefficients refer to standardized features.
     coefficients = pd.DataFrame(
         {
             "feature": FEATURES,
