@@ -5,8 +5,7 @@ bin/*.sh
 data/
 
 # Binaries for programs and plugins
-*.exe
-*.exe~
+*.exe*
 *.dll
 *.so
 *.dylib
@@ -17,19 +16,22 @@ data/
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
-*.coverprofile
-profile.cov
+*profile*
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
 # Go workspace file
-go.work
-go.work.sum
+go.work*
 
-# env file
-.env
+# Python & env file
+.*env**
+uv.lock
+*.toml
+.py*
+__pycache__/
 
-# Editor/IDE
-# .idea/
+# Editor/IDEi & OS
+.idea/
 .vscode/
+.DS_Store
