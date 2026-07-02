@@ -2,7 +2,7 @@
 bin/*.sh
 
 # DB copie
-data/
+# data/
 
 # Binaries for programs and plugins
 *.exe*
